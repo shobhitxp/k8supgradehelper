@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+openai
+GitPython
+python-multipart
+typer[all]
+requests
+rich
+PyYAML

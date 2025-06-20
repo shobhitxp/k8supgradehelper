@@ -1,0 +1,74 @@
+# Deprecated APIs
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: old-deployment
+  namespace: default
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: old-app
+  template:
+    metadata:
+      labels:
+        app: old-app
+    spec:
+      containers:
+      - name: old-container
+        image: nginx:1.18
+---
+# Current APIs
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: new-deployment
+  namespace: default
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: new-app
+  template:
+    metadata:
+      labels:
+        app: new-app
+    spec:
+      containers:
+      - name: new-container
+        image: nginx:1.21
+---
+# Deprecated Ingress
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: old-ingress
+  namespace: default
+spec:
+  rules:
+  - host: old.example.com
+    http:
+      paths:
+      - path: /
+        backend:
+          serviceName: old-service
+          servicePort: 80
+---
+# Current Ingress
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: new-ingress
+  namespace: default
+spec:
+  rules:
+  - host: new.example.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: new-service
+            port:
+              number: 80 

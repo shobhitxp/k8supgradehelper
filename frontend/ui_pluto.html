@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kubernetes API Deprecation Checker (Pluto)</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/@tailwindcss/browser@latest"></script>
+    <style>
+      /* Custom styles for the table and header to ensure they look good */
+      .pluto-table {
+        border-collapse: collapse;
+        width: 100%;
+        margin-top: 1rem;
+        border: 1px solid #e5e7eb;
+        border-radius: 0.5rem;
+        overflow: hidden; /* for rounded corners of the border */
+      }
+      .pluto-table thead tr {
+        background-color: #f9fafb;
+      }
+      .pluto-table th, .pluto-table td {
+        padding: 0.75rem;
+        text-align: left;
+        border-bottom: 1px solid #e5e7eb;
+      }
+      .pluto-table th {
+        font-weight: 500; /* Medium font weight */
+      }
+      .pluto-table tbody tr:hover {
+        background-color: #f5f5f5; /* Slight background change on hover */
+      }
+      .pluto-table tbody tr:last-child td {
+        border-bottom: none; /* No border for the last row */
+      }
+      .status-icon {
+        width: 1rem;
+        height: 1rem;
+        margin-right: 0.5rem;
+        display: inline-block;
+      }
+      .deprecated {
+        color: #dc2626; /* Tailwind red-700 */
+      }
+      .warning {
+        color: #f59e0b;  /* Tailwind amber-500 */
+      }
+      .ok {
+        color: #16a34a;    /* Tailwind green-700 */
+      }
+    </style>
+</head>
+<body class="bg-gray-100 font-inter antialiased">
+    <div class="container mx-auto p-6 sm:p-10 md:p-12 lg:p-16">
+        <div class="text-center mb-8">
+            <h1 class="text-3xl sm:text-4xl md:text-5xl font-semibold text-gray-800">
+                Kubernetes API Deprecation Checker (Pluto)
+            </h1>
+            <p class="mt-2 text-gray-600 text-lg">
+                Identify deprecated Kubernetes API versions in your cluster.
+            </p>
+        </div>
+
+        <div class="bg-white shadow-md rounded-lg p-6 mb-6">
+            <div class="flex flex-col sm:flex-row gap-4 justify-center items-start sm:items-center">
+                <button id="scanClusterButton" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 px-5 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors duration-200">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5 mr-2">
+                        <path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l-1.21-2.42A5 5 0 102 8zm2 4a4 4 0 014-4 4 4 0 014 4v1H2v-1zm6 0a2 2 0 100-4 2 2 0 000 4z" clip-rule="evenodd" />
+                    </svg>
+                    Scan Cluster
+                </button>
+                <div class="flex flex-col sm:flex-row gap-2 sm:gap-4 items-start sm:items-center">
+                    <input
+                        type="text"
+                        id="namespaceInput"
+                        placeholder="Enter Namespace (optional)"
+                        class="border border-gray-300 rounded-md py-2.5 px-4 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent w-full sm:w-64"
+                    />
+                    <button id="scanNamespaceButton" class="bg-green-600 hover:bg-green-700 text-white font-semibold py-2.5 px-5 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-colors duration-200 whitespace-nowrap">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5 mr-2">
+                            <path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12 17.5a1 1 0 01-1-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 01-1 1h-2zM6 17.5a1 1 0 01-1-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 01-1 1h-2zM15 13a1 1 0 11-2 0 1 1 0 012 0zM5 13a1 1 0 11-2 0 1 1 0 012 0z" />
+                        </svg>
+                        Scan Namespace
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div id="resultsContainer" class="bg-white shadow-md rounded-lg p-6">
+            <h2 class="text-2xl font-semibold text-gray-800 mb-4">Results</h2>
+            <div id="loadingIndicator" class="text-gray-600 italic flex items-center justify-center py-4">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="animate-spin w-6 h-6 mr-2">
+                    <path d="M21 12a9 9 0 11-6.219-8.56"></path>
+                </svg>
+                Loading...
+            </div>
+            <div id="errorContainer" class="text-red-600 font-semibold py-4 hidden"></div>
+            <div id="noDataContainer" class="text-gray-600 py-4 hidden">No deprecated API versions found.</div>
+            <table id="resultsTable" class="pluto-table hidden">
+                <thead>
+                    <tr>
+                        <th class="px-4 py-2">Namespace</th>
+                        <th class="px-4 py-2">Kind</th>
+                        <th class="px-4 py-2">Name</th>
+                        <th class="px-4 py-2">Deprecated API Version</th>
+                        <th class="px-4 py-2">Replacing API Version</th>
+                        <th class="px-4 py-2">Status</th>
+                    </tr>
+                </thead>
+                <tbody id="resultsBody">
+                    </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+    const scanClusterButton = document.getElementById('scanClusterButton');
+    const scanNamespaceButton = document.getElementById('scanNamespaceButton');
+    const namespaceInput = document.getElementById('namespaceInput');
+    const resultsContainer = document.getElementById('resultsContainer');
+    const resultsTable = document.getElementById('resultsTable');
+    const resultsBody = document.getElementById('resultsBody');
+    const loadingIndicator = document.getElementById('loadingIndicator');
+    const errorContainer = document.getElementById('errorContainer');
+    const noDataContainer = document.getElementById('noDataContainer');
+
+    // Function to show loading indicator
+    function showLoading() {
+        loadingIndicator.classList.remove('hidden');
+        resultsTable.classList.add('hidden');
+        errorContainer.classList.add('hidden');
+        noDataContainer.classList.add('hidden');
+    }
+
+    // Function to hide loading indicator
+    function hideLoading() {
+        loadingIndicator.classList.add('hidden');
+    }
+
+    // Function to display error message
+    function showError(message) {
+        errorContainer.textContent = message;
+        errorContainer.classList.remove('hidden');
+        resultsTable.classList.add('hidden');
+        loadingIndicator.classList.add('hidden');
+        noDataContainer.classList.add('hidden');
+    }
+
+    // Function to display no data message
+    function showNoData() {
+        noDataContainer.classList.remove('hidden');
+        resultsTable.classList.add('hidden');
+        loadingIndicator.classList.add('hidden');
+        errorContainer.classList.add('hidden');
+    }
+
+    // Function to clear the results table
+    function clearResults() {
+        resultsBody.innerHTML = '';
+    }
+
+    // Function to populate the results table
+    function populateResults(data) {
+        clearResults(); // Clear any previous results
+        if (!data || !data.items || data.items.length === 0) {
+            showNoData();
+            return;
+        }
+
+        data.items.forEach(item => {
+            let status = '';
+            let statusText = '';
+            switch (item.status) {
+                case 'DEPRECATED':
+                    status = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path fill="currentColor" d="M10 18a8 8 0 100-16 8 8 0 000 16zm0-9a1 1 0 011-1h3.414l-1.707 1.707a1 1 0 11-1.414 1.414L10 9.414V11a1 1 0 01-1 1v-3a1 1 0 011-1z"/></svg>';
+                    statusText = 'Deprecated';
+                    statusClass = 'deprecated';
+                    break;
+                case 'WARNING':
+                    status = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path fill="currentColor" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.485 8.612a1 1 0 00-1.414-1.414L8 5.757V4a1 1 0 011-1h2a1 1 0 011 1v1.757l.929 1.441a1 1 0 00-1.414 1.414L11 7.243v4.014a1 1 0 01-1 1H8a1 1 0 01-1-1V7.243l-1.515 1.369z"/></svg>';
+                    statusText = 'Warning';
+                    statusClass = 'warning';
+                    break;
+                default:
+                    status = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path fill="currentColor" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.808a1 1 0 00-1.214-1.235l-3.121 3.121-1.857-1.856a1 1 0 00-1.414 1.413l2.54 2.54a1 1 0 001.414 0l4.248-4.247a1 1 0 00-1.235-1.73z"/></svg>';
+                    statusText = 'OK';
+                    statusClass = 'ok';
+            }
+
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td class="px-4 py-2">${item.object.namespace || 'Cluster'}</td>
+                <td class="px-4 py-2">${item.object.kind}</td>
+                <td class="px-4 py-2">${item.object.name}</td>
+                <td class="px-4 py-2">${item.deprecatedVersion}</td>
+                <td class="px-4 py-2">${item.replacementVersion}</td>
+                <td class="px-4 py-2 flex items-center">
+                  <span class="${statusClass} status-icon">${status}</span>
+                  <span class="${statusClass} font-medium">${statusText}</span>
+                </td>
+            `;
+            resultsBody.appendChild(row);
+        });
+
+        resultsTable.classList.remove('hidden');
+        hideLoading();
+    }
+
+    // Function to fetch data from the backend
+    async function fetchData(endpoint) {
+        showLoading();
+        try {
+            const response = await fetch(endpoint);
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            const data = await response.json();
+            populateResults(data);
+        } catch (error) {
+            hideLoading();
+            showError(error.message);
+            console.error('Error fetching data:', error);
+        }
+    }
+
+    // Event listener for the Scan Cluster button
+    scanClusterButton.addEventListener('click', () => {
+        fetchData('/api/pluto/cluster');
+    });
+
+    // Event listener for the Scan Namespace button
+    scanNamespaceButton.addEventListener('click', () => {
+        const namespace = namespaceInput.value.trim();
+        if (namespace) {
+            fetchData(`/api/pluto/namespace/${namespace}`);
+        } else {
+            alert('Please enter a namespace.');
+        }
+    });
+
+    // Initial fetch (optional - you might want to start with a blank slate)
+    // fetchData('/api/pluto/cluster');
+    </script>
+</body>
+</html>
